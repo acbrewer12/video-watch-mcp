@@ -10,15 +10,11 @@ import os from "os";
 
 const execFileAsync = promisify(execFile);
 
-const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
+const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN; // optional — see note below
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const MAX_DURATION_SECONDS = 600; // 10 min cap, keeps this workable on a free instance
 const MAX_BODY_FRAMES = 16;
 
-if (!AUTH_TOKEN) {
-  console.error("Missing required env var: MCP_AUTH_TOKEN");
-  process.exit(1);
-}
 if (!GROQ_API_KEY) {
   console.error("Missing required env var: GROQ_API_KEY (free key from console.groq.com)");
   process.exit(1);
@@ -233,9 +229,17 @@ app.get("/", (_req, res) => res.send("Video-watch MCP server is running."));
 
 app.use((req, res, next) => {
   if (req.path === "/") return next();
-  const auth = req.headers.authorization || "";
-  if (auth !== `Bearer ${AUTH_TOKEN}`) {
-    return res.status(401).json({ error: "Unauthorized" });
+  // Auth is optional: claude.ai's connector UI has no field for a custom
+  // header, so enforcing a token here makes every connection attempt from
+  // Claude fail with a 401 and get misread as an OAuth requirement. If
+  // MCP_AUTH_TOKEN is set, it's still checked (useful for non-Claude
+  // clients that can send headers) — but Claude itself connects unauthed,
+  // relying on the URL being unguessable.
+  if (AUTH_TOKEN) {
+    const auth = req.headers.authorization || "";
+    if (auth !== `Bearer ${AUTH_TOKEN}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
   }
   next();
 });
