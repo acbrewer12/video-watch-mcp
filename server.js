@@ -47,6 +47,16 @@ async function run(cmd, args, opts = {}) {
   return execFileAsync(cmd, args, { maxBuffer: 1024 * 1024 * 50, ...opts });
 }
 
+// YouTube's web client gets heavily bot-checked on datacenter IPs (which is
+// what a Render/cloud server has). Its Android client API faces much lighter
+// checks and needs no cookies/login — the standard free workaround. Falls
+// back to web/ios if Android alone doesn't have the needed format.
+const YT_CLIENT_ARGS = ["--extractor-args", "youtube:player_client=android,web,ios"];
+
+async function ytdlp(args) {
+  return run("yt-dlp", [...YT_CLIENT_ARGS, ...args]);
+}
+
 function parseVtt(vttText) {
   // Returns structured segments: [{ start: seconds, text }]
   const lines = vttText.split("\n");
@@ -96,7 +106,7 @@ async function watchVideo(url) {
   try {
     // 1. Check for captions first — cheap, and tells us early if this video
     // is even usable without needing full audio transcription.
-    await run("yt-dlp", [
+    await ytdlp([
       "--skip-download",
       "--write-auto-sub",
       "--write-sub",
@@ -109,9 +119,16 @@ async function watchVideo(url) {
     const files = await fs.readdir(workDir);
     const vttFile = files.find((f) => f.endsWith(".vtt"));
 
-    // Duration check up front, before downloading anything heavy.
-    const { stdout: durStr } = await run("yt-dlp", ["--print", "%(duration)s", url]);
-    const duration = parseFloat(durStr.trim());
+    // Duration + metadata check up front, before downloading anything heavy.
+    const { stdout: metaStr } = await ytdlp([
+      "--print", "%(duration)s\n%(title)s\n%(uploader)s\n%(description)s",
+      url,
+    ]);
+    const [durLine, titleLine, uploaderLine, ...descLines] = metaStr.split("\n");
+    const duration = parseFloat(durLine.trim());
+    const title = (titleLine || "").trim();
+    const uploader = (uploaderLine || "").trim();
+    const description = descLines.join("\n").trim();
     if (duration && duration > MAX_DURATION_SECONDS && !vttFile) {
       return {
         content: [{ type: "text", text: `This video is ${Math.round(duration / 60)} minutes and has no captions — too long to transcribe on this server's free tier (cap is ${MAX_DURATION_SECONDS / 60} min).` }],
@@ -121,7 +138,7 @@ async function watchVideo(url) {
 
     // Download once, at a capped resolution, regardless of which transcript path we take.
     const videoPath = path.join(workDir, "video.mp4");
-    await run("yt-dlp", ["-o", videoPath, "-f", "mp4[height<=480]/mp4", url]);
+    await ytdlp(["-o", videoPath, "-f", "mp4[height<=480]/mp4", url]);
 
     let segments;
     if (vttFile) {
@@ -176,6 +193,7 @@ async function watchVideo(url) {
     }
 
     const content = [
+      { type: "text", text: `Title: ${title}\nChannel/Uploader: ${uploader}\n\nDescription:\n${description || "(no description provided)"}` },
       { type: "text", text: `Transcript:\n\n${transcript}` },
       {
         type: "text",
@@ -208,7 +226,7 @@ function buildServer() {
 
   server.tool(
     "watch_video",
-    "Download a video (YouTube, and other yt-dlp-supported sites), get its transcript (captions if available, otherwise free Groq Whisper transcription), and see it via two tiled contact-sheet images (first 15s, and the rest) — each accompanied by a text index mapping every grid cell to its timestamp and the transcript line spoken at that moment, so frames and dialogue line up without guessing. Videos over 10 minutes without captions get transcript-only.",
+    "Download a video (YouTube, and other yt-dlp-supported sites), get its title/uploader/description plus a transcript (captions if available, otherwise free Groq Whisper transcription), and see it via two tiled contact-sheet images (first 15s, and the rest) — each accompanied by a text index mapping every grid cell to its timestamp and the transcript line spoken at that moment, so frames and dialogue line up without guessing. Videos over 10 minutes without captions get transcript-only.",
     { url: z.string().describe("URL of the video to watch") },
     async ({ url }) => {
       try {
