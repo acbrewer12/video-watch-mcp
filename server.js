@@ -52,14 +52,31 @@ async function run(cmd, args, opts = {}) {
 // checks and needs no cookies/login — the standard free workaround. Falls
 // back to web/ios if Android alone doesn't have the needed format.
 const YT_CLIENT_ARGS = ["--extractor-args", "youtube:player_client=android,web,ios"];
-const YT_COOKIES_B64 = process.env.YT_COOKIES_B64; // optional — see README
+const YT_COOKIES_SECRET_PATH = "/etc/secrets/cookies.txt"; // Render Secret Files
+const YT_COOKIES_B64 = process.env.YT_COOKIES_B64; // fallback — see README, avoid if possible
 let cookiesFilePath = null;
+let cookiesChecked = false;
 
 async function ensureCookiesFile() {
-  if (!YT_COOKIES_B64 || cookiesFilePath) return cookiesFilePath;
-  const filePath = path.join(os.tmpdir(), "yt-cookies.txt");
-  await fs.writeFile(filePath, Buffer.from(YT_COOKIES_B64, "base64").toString("utf-8"));
-  cookiesFilePath = filePath;
+  if (cookiesChecked) return cookiesFilePath;
+  cookiesChecked = true;
+
+  // Prefer Render's Secret Files — a real file mount, not squeezed through
+  // an env var. Large base64 env vars can blow past the exec argument-list
+  // limit during the build step ("argument list too long").
+  try {
+    await fs.access(YT_COOKIES_SECRET_PATH);
+    cookiesFilePath = YT_COOKIES_SECRET_PATH;
+    return cookiesFilePath;
+  } catch {
+    // not present, fall through
+  }
+
+  if (YT_COOKIES_B64) {
+    const filePath = path.join(os.tmpdir(), "yt-cookies.txt");
+    await fs.writeFile(filePath, Buffer.from(YT_COOKIES_B64, "base64").toString("utf-8"));
+    cookiesFilePath = filePath;
+  }
   return cookiesFilePath;
 }
 

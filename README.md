@@ -37,21 +37,37 @@ carries a real, if small, risk of that account getting rate-limited or
 challenged. Only set this up if the client-spoofing trick has actually
 stopped working, not preemptively.
 
-**Setup:**
-1. Install a cookie-export browser extension (e.g. "Get cookies.txt
-   LOCALLY" for Chrome) — free, legitimate, does exactly what it says.
-2. Log into youtube.com normally in that browser with a real account.
-3. Use the extension to export cookies for youtube.com as a
+**Setup — use Render's Secret Files, not an environment variable.** A
+base64-encoded cookies file is often too large to pass through env vars
+during the build step and can cause an "argument list too long" build
+failure. Secret Files avoid this entirely — they're a real file mount,
+not squeezed through exec arguments.
+
+1. Install a cookie-export browser extension:
+   - Chrome: "Get cookies.txt LOCALLY" (Chrome Web Store)
+   - Firefox / Zen / other Firefox-based browsers: same name, on Firefox
+     Add-ons (addons.mozilla.org) — same developer, separate listing.
+2. Log into youtube.com normally with a real account (yours or a
+   parent's).
+3. Use the extension to export cookies **for youtube.com specifically**
+   (not "all cookies" — keep the file small and scoped) as a
    Netscape-format `cookies.txt` file.
-4. Base64-encode the file's contents:
-   - Mac/Linux terminal: `base64 -i cookies.txt | tr -d '\n'`
-   - Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt"))`
-5. Set the result as an environment variable on Render: `YT_COOKIES_B64`.
-6. Redeploy.
+4. On Render: go to the `video-watch-mcp` service → **Environment** tab →
+   scroll to **Secret Files** → Add Secret File.
+   - Filename: `cookies.txt`
+   - Contents: paste the raw contents of the exported file — no
+     base64 encoding needed, it's a real file, not an env var.
+5. Save — this redeploys automatically. No `YT_COOKIES_B64` env var
+   needed; the server checks `/etc/secrets/cookies.txt` first
+   automatically.
 
 **Cookies expire** — typically weeks to a couple months. When YouTube
-access breaks again despite this being set, that's usually why: re-export
-fresh cookies and update the env var, same steps as above.
+access breaks again despite this being set up, that's usually why:
+re-export fresh cookies and re-paste them into the same Secret File.
+
+(A `YT_COOKIES_B64` env var still works as a fallback if Secret Files
+aren't available for some reason, but Secret Files is the recommended
+path — it's what avoids the build error in the first place.)
 
 
 - 10-minute video cap for videos without captions (Whisper transcription
