@@ -63,10 +63,15 @@ async function ensureCookiesFile() {
 
   // Prefer Render's Secret Files — a real file mount, not squeezed through
   // an env var. Large base64 env vars can blow past the exec argument-list
-  // limit during the build step ("argument list too long").
+  // limit during the build step ("argument list too long"). Secret Files
+  // are mounted read-only though, and yt-dlp needs to write refreshed
+  // session data back to the cookies file — so copy it to a writable temp
+  // path first rather than pointing yt-dlp at the read-only original.
   try {
     await fs.access(YT_COOKIES_SECRET_PATH);
-    cookiesFilePath = YT_COOKIES_SECRET_PATH;
+    const writablePath = path.join(os.tmpdir(), "yt-cookies.txt");
+    await fs.copyFile(YT_COOKIES_SECRET_PATH, writablePath);
+    cookiesFilePath = writablePath;
     return cookiesFilePath;
   } catch {
     // not present, fall through
