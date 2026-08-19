@@ -52,9 +52,21 @@ async function run(cmd, args, opts = {}) {
 // checks and needs no cookies/login — the standard free workaround. Falls
 // back to web/ios if Android alone doesn't have the needed format.
 const YT_CLIENT_ARGS = ["--extractor-args", "youtube:player_client=android,web,ios"];
+const YT_COOKIES_B64 = process.env.YT_COOKIES_B64; // optional — see README
+let cookiesFilePath = null;
+
+async function ensureCookiesFile() {
+  if (!YT_COOKIES_B64 || cookiesFilePath) return cookiesFilePath;
+  const filePath = path.join(os.tmpdir(), "yt-cookies.txt");
+  await fs.writeFile(filePath, Buffer.from(YT_COOKIES_B64, "base64").toString("utf-8"));
+  cookiesFilePath = filePath;
+  return cookiesFilePath;
+}
 
 async function ytdlp(args) {
-  return run("yt-dlp", [...YT_CLIENT_ARGS, ...args]);
+  const cookies = await ensureCookiesFile();
+  const cookieArgs = cookies ? ["--cookies", cookies] : [];
+  return run("yt-dlp", [...YT_CLIENT_ARGS, ...cookieArgs, ...args]);
 }
 
 function parseVtt(vttText) {

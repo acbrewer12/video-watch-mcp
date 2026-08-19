@@ -25,7 +25,34 @@ this works on essentially any video, not just captioned ones.
 Settings → Connectors → Add custom connector:
 - URL: `https://<your-app>.onrender.com/mcp`
 
-## Limits (free tier reality)
+## YouTube cookies (if the Android-client workaround stops working)
+
+YouTube's bot detection is a moving target — the `player_client` trick
+above can stop working without warning (this happened once already). The
+next-tier fix is providing real cookies from a logged-in YouTube account.
+
+**Real tradeoff, not a free lunch**: this ties the tool to an actual
+account (yours or a parent's, never a fake one), and heavy automated use
+carries a real, if small, risk of that account getting rate-limited or
+challenged. Only set this up if the client-spoofing trick has actually
+stopped working, not preemptively.
+
+**Setup:**
+1. Install a cookie-export browser extension (e.g. "Get cookies.txt
+   LOCALLY" for Chrome) — free, legitimate, does exactly what it says.
+2. Log into youtube.com normally in that browser with a real account.
+3. Use the extension to export cookies for youtube.com as a
+   Netscape-format `cookies.txt` file.
+4. Base64-encode the file's contents:
+   - Mac/Linux terminal: `base64 -i cookies.txt | tr -d '\n'`
+   - Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt"))`
+5. Set the result as an environment variable on Render: `YT_COOKIES_B64`.
+6. Redeploy.
+
+**Cookies expire** — typically weeks to a couple months. When YouTube
+access breaks again despite this being set, that's usually why: re-export
+fresh cookies and update the env var, same steps as above.
+
 
 - 10-minute video cap for videos without captions (Whisper transcription
   needs the download first); captioned videos can go a bit longer since
